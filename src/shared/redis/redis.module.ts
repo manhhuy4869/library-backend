@@ -16,7 +16,7 @@ import { RedisService } from './redis.service';
           host: config.get('redis.host'),
           port: config.get('redis.port'),
           password: config.get('redis.password'),
-          tls: {},
+          tls: config.get('redis.tls'),
         }),
       inject: [ConfigService],
     },

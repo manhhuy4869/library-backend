@@ -1,0 +1,194 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Book {
+  id        Int         @id @default(autoincrement())
+  title     String
+  author    String
+  category  String
+  publisher String?
+  isbn      String?     @unique
+  copies    BookCopy[]
+  createdAt DateTime    @default(now())
+
+  @@map("books")
+}
+
+model BookCopy {
+  id            Int             @id @default(autoincrement())
+  book          Book            @relation(fields: [bookId], references: [id])
+  bookId        Int
+  copyCode      String          @unique
+  shelfRow      String
+  shelfColumn   String
+  shelfLevel    String
+  status        BookCopyStatus  @default(available)
+  borrowRecords BorrowRecord[]
+  reservations  Reservation[]
+
+  @@map("book_copies")
+}
+
+model Reader {
+  id            Int             @id @default(autoincrement())
+  fullName      String
+  studentCode   String          @unique
+  className     String?
+  phone         String?
+  userId        Int?            @unique
+  user          User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  borrowRecords BorrowRecord[]
+  reservations  Reservation[]
+
+  @@map("readers")
+}
+
+model BorrowRecord {
+  id         Int          @id @default(autoincrement())
+  copy       BookCopy     @relation(fields: [copyId], references: [id])
+  copyId     Int
+  reader     Reader       @relation(fields: [readerId], references: [id])
+  readerId   Int
+  borrowDate DateTime     @default(now())
+  dueDate    DateTime
+  returnDate DateTime?
+  status     BorrowStatus @default(borrowing)
+  fine       Fine?
+
+  @@map("borrow_records")
+}
+
+model User {
+  id         Int        @id @default(autoincrement())
+  username   String     @unique
+  password   String
+  fullName   String
+  role       String     @default("librarian")
+  accessRole AccessRole @relation(fields: [role], references: [code], onDelete: Restrict, onUpdate: Cascade)
+  reader     Reader?
+  notifications Notification[]
+  auditLogs    AuditLog[]
+
+  @@map("users")
+}
+
+model AccessRole {
+  code        String           @id
+  name        String           @unique
+  description String?
+  isSystem    Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  users       User[]
+  permissions RolePermission[]
+
+  @@map("access_roles")
+}
+
+model Permission {
+  code        String           @id
+  name        String           @unique
+  description String?
+  roles       RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleCode       String
+  permissionCode String
+  role           AccessRole @relation(fields: [roleCode], references: [code], onDelete: Cascade, onUpdate: Cascade)
+  permission     Permission @relation(fields: [permissionCode], references: [code], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([roleCode, permissionCode])
+  @@map("role_permissions")
+}
+
+model Reservation {
+  id          Int               @id @default(autoincrement())
+  copy        BookCopy          @relation(fields: [copyId], references: [id])
+  copyId      Int
+  reader      Reader            @relation(fields: [readerId], references: [id])
+  readerId    Int
+  scheduledAt DateTime
+  status      ReservationStatus @default(pending)
+  createdAt   DateTime          @default(now())
+
+  @@index([readerId, scheduledAt])
+  @@map("reservations")
+}
+
+model Fine {
+  id            Int       @id @default(autoincrement())
+  borrowRecord  BorrowRecord @relation(fields: [borrowRecordId], references: [id], onDelete: Cascade)
+  borrowRecordId Int      @unique
+  amount        Int
+  daysLate      Int
+  status        FineStatus @default(unpaid)
+  paidAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@map("fines")
+}
+
+model Notification {
+  id          Int      @id @default(autoincrement())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      Int
+  type        String
+  title       String
+  message     String
+  referenceId Int?
+  readAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([userId, readAt, createdAt])
+  @@unique([userId, type, referenceId])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId     Int?
+  action     String
+  entity     String
+  entityId   Int?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([entity, entityId, createdAt])
+  @@index([userId, createdAt])
+  @@map("audit_logs")
+}
+
+enum BookCopyStatus {
+  available
+  reserved
+  borrowed
+  lost
+  damaged
+}
+
+enum ReservationStatus {
+  pending
+  fulfilled
+  cancelled
+}
+
+enum BorrowStatus {
+  borrowing
+  returned
+  overdue
+}
+
+enum FineStatus {
+  unpaid
+  paid
+}

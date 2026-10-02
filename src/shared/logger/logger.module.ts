@@ -3,30 +3,38 @@ import { LoggerModule as PinoLoggerModule } from 'nestjs-pino';
 import { randomUUID } from 'crypto';
 import { join } from 'path';
 
-// Thay Logger mặc định của Nest bằng Pino - log ra JSON có cấu trúc (level, time,
-// context, msg...) thay vì text thường, dễ đưa vào công cụ tra cứu log (ELK, Datadog)
-// khi deploy thật. LoggerMiddleware ở common/ vẫn giữ nguyên, chỉ đổi nơi log ghi ra.
+// Console và file dùng cùng pretty format. File tự xoay mỗi ngày theo tên
+// app-YYYY-MM-DD.log. LoggerMiddleware log request.
 const isDev = process.env.NODE_ENV === 'development';
+const logDirectory = join(process.cwd(), 'logs');
+const prettyOptions = {
+  colorize: isDev,
+  translateTime: 'SYS:standard',
+  levelFirst: true,
+  singleLine: true,
+  messageFormat: '{context}: {msg}',
+  ignore: 'pid,hostname,context',
+};
 
 @Module({
   imports: [
     PinoLoggerModule.forRoot({
       pinoHttp: {
         level: isDev ? 'debug' : 'info',
-        // Dev: in đẹp ra console (pino-pretty), dễ đọc lúc code.
-        // KHÔNG PHẢI dev (staging/production/test): ghi JSON ra 2 nơi cùng lúc -
-        // (1) stdout, để platform deploy (Docker/K8s/PM2...) vẫn thu log được như
-        // bình thường, và (2) file logs/app.log trên đĩa, để có thể mở/grep trực
-        // tiếp mà không phụ thuộc công cụ tra log ngoài. mkdir: true tự tạo thư
-        // mục logs/ nếu chưa có, không cần tạo tay trước khi deploy.
+        autoLogging: false,
+        // LoggerMiddleware đã ghi method/status/duration; tắt autoLogging để mỗi
+        // request không bị ghi hai lần. Pino vẫn tạo request ID và gắn vào response.
         transport: isDev
-          ? { target: 'pino-pretty', options: { singleLine: true } }
+          ? { target: 'pino-pretty', options: prettyOptions }
           : {
               targets: [
-                { target: 'pino/file', options: { destination: 1 } }, // fd 1 = stdout
                 {
-                  target: 'pino/file',
-                  options: { destination: join(process.cwd(), 'logs', 'app.log'), mkdir: true },
+                  target: 'pino-pretty',
+                  options: prettyOptions,
+                },
+                {
+                  target: join(__dirname, 'pretty-daily-transport.js'),
+                  options: { logDirectory, prettyOptions },
                 },
               ],
             },

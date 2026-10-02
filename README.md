@@ -271,10 +271,9 @@ handler trong `HttpExceptionFilter`. Áp dụng ở `book-copies`, `readers`, `u
 
 ## Ghi log ra file (môi trường không phải development)
 
-`shared/logger/logger.module.ts`: `NODE_ENV=development` → in đẹp ra console
-(`pino-pretty`). Mọi môi trường khác (staging/production/test) → ghi JSON ra
-**2 nơi cùng lúc**: stdout (để platform deploy vẫn thu log bình thường) và file
-`logs/app.log` trên đĩa (`mkdir: true` tự tạo thư mục, không cần tạo tay).
+`shared/logger/logger.module.ts`: console và file đều dùng cùng định dạng dễ đọc
+(`pino-pretty`). File tự xoay theo ngày, ví dụ `logs/app-2026-10-02.log`, và đổi
+tên lúc nửa đêm theo giờ local. Thư mục log được tạo tự động nếu chưa có.
 `docker-compose.yml` đã mount volume `./logs:/app/logs` để log không mất khi
 container bị xóa/restart.
 

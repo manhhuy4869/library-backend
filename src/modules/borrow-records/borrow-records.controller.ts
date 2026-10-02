@@ -9,6 +9,8 @@ import { Permission } from '../../constants/permissions.enum';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtPayload } from '../../types/jwt-payload.interface';
 import { AuditService } from '../audit/audit.service';
+import { PaginationDto } from '../../common/dto/pagination.dto';
+import { ConfirmReceiptConditionDto } from './dto/confirm-receipt-condition.dto';
 
 @ApiTags('borrow-records')
 @Controller('borrow-records')
@@ -27,6 +29,22 @@ export class BorrowRecordsController {
     return this.borrowRecordsService.findOwn(user.sub);
   }
 
+  @Get('own/history')
+  @Permissions(Permission.BORROW_READ_OWN)
+  findOwnHistory(@CurrentUser() user: JwtPayload, @Query() query: PaginationDto) {
+    return this.borrowRecordsService.findOwnHistory(user.sub, query);
+  }
+
+  @Post('own/:id/confirm-condition')
+  @Permissions(Permission.BORROW_READ_OWN)
+  confirmOwnCondition(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: ConfirmReceiptConditionDto,
+  ) {
+    return this.borrowRecordsService.confirmOwnCondition(user.sub, +id, dto);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.borrowRecordsService.findOne(+id);
@@ -42,7 +60,10 @@ export class BorrowRecordsController {
   @Post('return')
   async return_(@CurrentUser() user: JwtPayload, @Body() dto: ReturnBookDto) {
     const record = await this.borrowRecordsService.returnBook(dto);
-    await this.audit.record(user.sub, 'return', 'borrow_record', record.id, { copyId: dto.copyId });
+    await this.audit.record(user.sub, 'return', 'borrow_record', record.id, {
+      copyId: dto.copyId,
+      condition: dto.condition ?? 'available',
+    });
     return record;
   }
 }

@@ -29,6 +29,7 @@ model BookCopy {
   shelfColumn   String
   shelfLevel    String
   status        BookCopyStatus  @default(available)
+  conditionNote String?
   borrowRecords BorrowRecord[]
   reservations  Reservation[]
 
@@ -59,23 +60,34 @@ model BorrowRecord {
   dueDate    DateTime
   returnDate DateTime?
   status     BorrowStatus @default(borrowing)
-  fine       Fine?
+  receiptCondition      ReceiptCondition @default(pending)
+  conditionNote         String?
+  conditionConfirmedAt  DateTime?
+  staffIssueConfirmedAt DateTime?
+  fines                 Fine[]
 
   @@map("borrow_records")
 }
 
 model User {
-  id         Int        @id @default(autoincrement())
-  username   String     @unique
-  password   String
-  fullName   String
-  role       String     @default("librarian")
-  accessRole AccessRole @relation(fields: [role], references: [code], onDelete: Restrict, onUpdate: Cascade)
-  reader     Reader?
+  id             Int                    @id @default(autoincrement())
+  username       String                 @unique
+  password       String
+  fullName       String
+  role           String                 @default("librarian")
+  approvalStatus StudentApprovalStatus  @default(approved)
+  accessRole     AccessRole             @relation(fields: [role], references: [code], onDelete: Restrict, onUpdate: Cascade)
+  reader         Reader?
   notifications Notification[]
   auditLogs    AuditLog[]
 
   @@map("users")
+}
+
+enum StudentApprovalStatus {
+  pending
+  approved
+  rejected
 }
 
 model AccessRole {
@@ -125,16 +137,30 @@ model Reservation {
 }
 
 model Fine {
-  id            Int       @id @default(autoincrement())
-  borrowRecord  BorrowRecord @relation(fields: [borrowRecordId], references: [id], onDelete: Cascade)
-  borrowRecordId Int      @unique
-  amount        Int
-  daysLate      Int
-  status        FineStatus @default(unpaid)
-  paidAt        DateTime?
-  createdAt     DateTime  @default(now())
+  id             Int          @id @default(autoincrement())
+  borrowRecord   BorrowRecord @relation(fields: [borrowRecordId], references: [id], onDelete: Cascade)
+  borrowRecordId Int
+  type           FineType     @default(late_return)
+  reason         String?
+  amount         Int
+  daysLate       Int          @default(0)
+  status         FineStatus   @default(unpaid)
+  paidAt         DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@unique([borrowRecordId, type])
 
   @@map("fines")
+}
+
+model FinePolicy {
+  id               Int      @id @default(1)
+  lateReturnPerDay Int
+  damagedBookFee   Int
+  lostBookFee      Int
+  updatedAt        DateTime @updatedAt
+
+  @@map("fine_policies")
 }
 
 model Notification {
@@ -186,6 +212,18 @@ enum BorrowStatus {
   borrowing
   returned
   overdue
+}
+
+enum ReceiptCondition {
+  pending
+  good
+  damaged
+}
+
+enum FineType {
+  late_return
+  damaged
+  lost
 }
 
 enum FineStatus {

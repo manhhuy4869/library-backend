@@ -7,6 +7,7 @@ import { SearchBookDto } from './dto/search-book.dto';
 import { Permissions } from '../../common/decorators/permissions.decorator';
 import { Permission } from '../../constants/permissions.enum';
 import { ImportBooksDto } from './dto/import-books.dto';
+import { DeleteBooksDto } from './dto/delete-books.dto';
 
 @ApiTags('books')
 @Controller('books')
@@ -35,6 +36,12 @@ export class BooksController {
   @Permissions(Permission.BOOK_MANAGE)
   importMany(@Body() dto: ImportBooksDto) {
     return this.booksService.importMany(dto);
+  }
+
+  @Post('bulk-delete')
+  @Permissions(Permission.BOOK_MANAGE)
+  removeMany(@Body() dto: DeleteBooksDto) {
+    return this.booksService.removeMany(dto.ids);
   }
 
   @Put(':id')

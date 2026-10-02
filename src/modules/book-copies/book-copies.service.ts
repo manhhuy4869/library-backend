@@ -73,7 +73,12 @@ export class BookCopiesService {
 
   async update(id: number, dto: UpdateBookCopyDto) {
     await this.findOne(id);
-    return this.prisma.bookCopy.update({ where: { id }, data: dto });
+    const data = {
+      ...dto,
+      ...(dto.status === BookCopyStatus.damaged ? { conditionNote: dto.conditionNote?.trim() } : {}),
+      ...(dto.status && dto.status !== BookCopyStatus.damaged ? { conditionNote: null } : {}),
+    };
+    return this.prisma.bookCopy.update({ where: { id }, data });
   }
 
   async remove(id: number) {

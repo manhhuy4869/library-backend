@@ -45,4 +45,19 @@ describe('BooksService', () => {
     expect(result).toEqual({ items: [], total: 0, page: 1, pageSize: 10 });
     expect(mockRedis.set).toHaveBeenCalled();
   });
+
+  it('findAll() lọc đồng thời theo tên sách, tác giả và thể loại', async () => {
+    mockPrisma.book.findMany.mockResolvedValue([]);
+    mockPrisma.book.count.mockResolvedValue(0);
+
+    await service.findAll({ search: 'Lập trình', author: 'Nguyễn', category: 'Công nghệ', page: 1, pageSize: 10 });
+
+    expect(mockPrisma.book.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        title: { contains: 'Lập trình', mode: 'insensitive' },
+        author: { contains: 'Nguyễn', mode: 'insensitive' },
+        category: { contains: 'Công nghệ', mode: 'insensitive' },
+      },
+    }));
+  });
 });

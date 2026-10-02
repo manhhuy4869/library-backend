@@ -4,11 +4,13 @@ import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
-import { PaginationDto } from '../../common/dto/pagination.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtPayload } from '../../types/jwt-payload.interface';
 import { Permissions } from '../../common/decorators/permissions.decorator';
 import { Permission } from '../../constants/permissions.enum';
+import { CreateStudentsDto } from './dto/create-students.dto';
+import { SearchUserDto } from './dto/search-user.dto';
+import { StudentApprovalStatus } from '@prisma/client';
 
 // Không @Public() ở đâu trong controller này - JwtAuthGuard (global) tự áp dụng,
 // mọi endpoint đều cần đăng nhập. TODO: khi có nhiều role, gắn thêm
@@ -21,7 +23,7 @@ export class UserController {
 
   @Get()
   @Permissions(Permission.USER_MANAGE)
-  findAll(@Query() query: PaginationDto) {
+  findAll(@Query() query: SearchUserDto) {
     return this.userService.findAll(query);
   }
 
@@ -35,6 +37,24 @@ export class UserController {
   @Permissions(Permission.USER_MANAGE)
   create(@Body() dto: CreateUserDto) {
     return this.userService.create(dto);
+  }
+
+  @Post('students/bulk')
+  @Permissions(Permission.USER_MANAGE)
+  createStudents(@Body() dto: CreateStudentsDto) {
+    return this.userService.createStudents(dto);
+  }
+
+  @Post(':id/approve')
+  @Permissions(Permission.USER_MANAGE)
+  approveStudent(@Param('id') id: string) {
+    return this.userService.setStudentApproval(+id, StudentApprovalStatus.approved);
+  }
+
+  @Post(':id/reject')
+  @Permissions(Permission.USER_MANAGE)
+  rejectStudent(@Param('id') id: string) {
+    return this.userService.setStudentApproval(+id, StudentApprovalStatus.rejected);
   }
 
   @Put(':id')

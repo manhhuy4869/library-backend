@@ -1,5 +1,6 @@
 import { ApiPropertyOptional, PartialType, OmitType } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsEnum, ValidateIf, MaxLength } from 'class-validator';
+import { BookCopyStatus } from '@prisma/client';
 import { CreateBookCopyDto } from './create-book-copy.dto';
 
 // Bỏ bookId (không cho đổi đầu sách gốc) VÀ copyCode (bỏ @IsUnique kế thừa từ
@@ -15,4 +16,16 @@ export class UpdateBookCopyDto extends PartialType(
   @IsString()
   @IsNotEmpty()
   copyCode?: string;
+
+  @ApiPropertyOptional({ enum: BookCopyStatus })
+  @IsOptional()
+  @IsEnum(BookCopyStatus)
+  status?: BookCopyStatus;
+
+  @ApiPropertyOptional({ maxLength: 500, description: 'Required when status is damaged' })
+  @ValidateIf((dto: UpdateBookCopyDto) => dto.status === BookCopyStatus.damaged)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(500)
+  conditionNote?: string;
 }

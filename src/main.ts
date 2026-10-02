@@ -6,6 +6,7 @@ import { useContainer } from 'class-validator';
 import { Logger } from 'nestjs-pino';
 import helmet from 'helmet';
 import compression from 'compression';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { setupSwagger } from './setup-swagger';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -50,8 +51,9 @@ async function bootstrap() {
   // Nén response (gzip) - giảm băng thông đáng kể với JSON payload lớn (danh sách
   // sách/hóa đơn nhiều bản ghi), gần như miễn phí về hiệu năng CPU đổi lại.
   app.use(compression());
+  app.use(cookieParser());
 
-  app.enableCors({ origin: config.get('app.frontendUrl') });
+  app.enableCors({ origin: config.get('app.frontendUrl'), credentials: true });
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

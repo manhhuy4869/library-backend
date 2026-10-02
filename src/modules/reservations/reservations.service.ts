@@ -109,6 +109,7 @@ export class ReservationsService {
           readerId: reservation.readerId,
           dueDate,
           status: BorrowStatus.borrowing,
+          staffIssueConfirmedAt: new Date(),
         },
       });
       return tx.reservation.findUniqueOrThrow({ where: { id }, include: RESERVATION_INCLUDE });

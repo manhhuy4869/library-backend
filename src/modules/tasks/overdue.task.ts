@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { BorrowStatus, FineStatus } from '@prisma/client';
+import { BorrowStatus, FineStatus, FineType } from '@prisma/client';
 import { PrismaService } from '../../shared/database/prisma.service';
-import { FINE_PER_DAY } from '../../constants/business.constants';
+import { FINE_DAMAGED_BOOK, FINE_LOST_BOOK, FINE_PER_DAY } from '../../constants/business.constants';
 
 // Tương đương Laravel Task Scheduling (php artisan schedule:run + Kernel.php) -
 // NestJS không có sẵn như Laravel, phải cài thêm @nestjs/schedule (nest-admin cũng
@@ -26,16 +26,23 @@ export class OverdueTask {
       this.logger.log(`Đã đánh dấu ${result.count} phiếu mượn quá hạn`);
     }
 
+    const policy = await this.prisma.finePolicy.upsert({
+      where: { id: 1 },
+      update: {},
+      create: { id: 1, lateReturnPerDay: FINE_PER_DAY, damagedBookFee: FINE_DAMAGED_BOOK, lostBookFee: FINE_LOST_BOOK },
+    });
+    const finePerDay = policy.lateReturnPerDay;
     const overdueRecords = await this.prisma.borrowRecord.findMany({
       where: { status: BorrowStatus.overdue },
-      include: { reader: true, copy: { include: { book: true } }, fine: true },
+      include: { reader: true, copy: { include: { book: true } } },
     });
     for (const record of overdueRecords) {
       const daysLate = Math.max(1, Math.ceil((Date.now() - record.dueDate.getTime()) / 86_400_000));
+      const amount = daysLate * finePerDay;
       await this.prisma.fine.upsert({
-        where: { borrowRecordId: record.id },
-        create: { borrowRecordId: record.id, daysLate, amount: daysLate * FINE_PER_DAY, status: FineStatus.unpaid },
-        update: { daysLate, amount: daysLate * FINE_PER_DAY },
+        where: { borrowRecordId_type: { borrowRecordId: record.id, type: FineType.late_return } },
+        create: { borrowRecordId: record.id, type: FineType.late_return, daysLate, amount, status: FineStatus.unpaid },
+        update: { daysLate, amount },
       });
       if (record.reader.userId) {
         await this.prisma.notification.upsert({
@@ -44,10 +51,10 @@ export class OverdueTask {
             userId: record.reader.userId,
             type: 'borrow_overdue',
             title: 'Sách đã quá hạn',
-            message: `Sách "${record.copy.book.title}" đã quá hạn ${daysLate} ngày. Tiền phạt hiện tại: ${(daysLate * FINE_PER_DAY).toLocaleString('vi-VN')}đ.`,
+            message: `Sách "${record.copy.book.title}" đã quá hạn ${daysLate} ngày. Tiền phạt hiện tại: ${amount.toLocaleString('vi-VN')}đ.`,
             referenceId: record.id,
           },
-          update: { message: `Sách "${record.copy.book.title}" đã quá hạn ${daysLate} ngày. Tiền phạt hiện tại: ${(daysLate * FINE_PER_DAY).toLocaleString('vi-VN')}đ.` },
+          update: { message: `Sách "${record.copy.book.title}" đã quá hạn ${daysLate} ngày. Tiền phạt hiện tại: ${amount.toLocaleString('vi-VN')}đ.` },
         });
       }
     }

@@ -170,8 +170,10 @@ npm run test:e2e
 npx prisma db seed
 ```
 
-Tạo sẵn: tài khoản `thuthu` (mật khẩu `123456`), 1 sách kèm 2 bản sao, 1 độc giả —
-demo nhanh không phải nhập tay.
+Tạo sẵn tài khoản thủ thư `thuthu` (mật khẩu `123456`), tài khoản admin `admin`
+(mật khẩu `admin123456`), 50 tài khoản sinh viên `sinhvien001`–`sinhvien050`
+(mật khẩu `123456`), hồ sơ độc giả tương ứng, 1.200 đầu sách có 10 bản sao mỗi
+đầu sách và 1 sách NestJS mẫu có 10 bản sao.
 
 ## Lint & format
 

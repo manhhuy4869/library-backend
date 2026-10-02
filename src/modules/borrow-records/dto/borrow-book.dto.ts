@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt } from 'class-validator';
+import { IsBoolean, IsInt } from 'class-validator';
 import { EntityExists } from '../../../shared/database/constraints/entity-exist.constraint';
 
 export class BorrowBookDto {
@@ -12,4 +12,8 @@ export class BorrowBookDto {
   @IsInt()
   @EntityExists('reader')
   readerId: number;
+
+  @ApiProperty({ description: 'Nhân viên đã kiểm tra bản sao còn tốt trước khi giao' })
+  @IsBoolean()
+  issueConditionConfirmed: boolean;
 }

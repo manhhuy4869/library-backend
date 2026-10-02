@@ -31,12 +31,13 @@ export class AuthService {
 
   async login(username: string, password: string) {
     const user = await this.validateUser(username, password);
+    await this.userService.ensureApproved(user.id);
     return this.issueTokens({ sub: user.id, username: user.username, role: user.role });
   }
 
   async registerStudent(dto: RegisterStudentDto) {
-    const user = await this.userService.registerStudent(dto);
-    return this.issueTokens({ sub: user.id, username: user.username, role: user.role });
+    await this.userService.registerStudent(dto);
+    return { approvalStatus: 'pending', message: 'Đăng ký thành công. Tài khoản sẽ đăng nhập được sau khi quản trị viên duyệt.' };
   }
 
   async refresh(refreshToken: string) {
@@ -51,6 +52,7 @@ export class AuthService {
     // giá trị trong Redis sẽ khác/đã bị xóa, chặn ngay dù chữ ký JWT vẫn hợp lệ.
     const stored = await this.redis.get<string>(`refresh:${payload.sub}`);
     if (stored !== refreshToken) throw new UnauthorizedException('Refresh token đã bị thu hồi');
+    await this.userService.ensureApproved(payload.sub);
 
     return this.issueTokens(payload);
   }

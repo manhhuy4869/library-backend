@@ -10,4 +10,5 @@ export enum Permission {
   RESERVATION_READ_OWN = 'reservation:read-own',
   RESERVATION_MANAGE = 'reservation:manage',
   ROLE_MANAGE = 'role:manage',
+  FINE_POLICY_MANAGE = 'fine-policy:manage',
 }

@@ -7,9 +7,11 @@ import { buildPaginatedResult, getSkipTake } from '../../helper/paginate/paginat
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
-import { PaginationDto } from '../../common/dto/pagination.dto';
 import { Role } from '../../constants/roles.enum';
+import { StudentApprovalStatus } from '@prisma/client';
 import { RegisterStudentDto } from '../auth/dto/register-student.dto';
+import { CreateStudentsDto } from './dto/create-students.dto';
+import { SearchUserDto } from './dto/search-user.dto';
 
 // Field KHÔNG BAO GIỜ trả ra ngoài - dù là response API hay log. select: { password:
 // false } không tồn tại trong Prisma, nên phải tự loại bỏ thủ công sau khi query.
@@ -28,10 +30,11 @@ export class UserService {
     return this.prisma.user.findUnique({ where: { username } });
   }
 
-  async findAll({ page, pageSize }: PaginationDto) {
+  async findAll({ page, pageSize, approvalStatus }: SearchUserDto) {
+    const where = approvalStatus ? { approvalStatus } : undefined;
     const [items, total] = await Promise.all([
-      this.prisma.user.findMany(getSkipTake(page, pageSize)),
-      this.prisma.user.count(),
+      this.prisma.user.findMany({ where, ...getSkipTake(page, pageSize) }),
+      this.prisma.user.count({ where }),
     ]);
     return buildPaginatedResult(items.map(excludePassword), total, page, pageSize);
   }
@@ -43,6 +46,9 @@ export class UserService {
   }
 
   async create(dto: CreateUserDto) {
+    if (dto.role === Role.STUDENT) {
+      throw new BadRequestException('Hãy dùng chức năng nhập danh sách sinh viên để tạo tài khoản kèm hồ sơ độc giả');
+    }
     if (dto.role) await this.ensureRoleExists(dto.role);
     const hashedPassword = await bcrypt.hash(dto.password, 10);
     const user = await this.prisma.user.create({
@@ -55,7 +61,13 @@ export class UserService {
     const hashedPassword = await bcrypt.hash(dto.password, 10);
     return this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
-        data: { username: dto.username, password: hashedPassword, fullName: dto.fullName, role: Role.STUDENT },
+        data: {
+          username: dto.username,
+          password: hashedPassword,
+          fullName: dto.fullName,
+          role: Role.STUDENT,
+          approvalStatus: StudentApprovalStatus.pending,
+        },
       });
       const reader = await tx.reader.findUnique({ where: { studentCode: dto.studentCode } });
 
@@ -76,6 +88,60 @@ export class UserService {
 
       return excludePassword(user);
     });
+  }
+
+  async createStudents({ students }: CreateStudentsDto) {
+    return this.prisma.$transaction(async (tx) => {
+      const [existingUsers, existingReaders] = await Promise.all([
+        tx.user.findMany({ where: { username: { in: students.map(({ username }) => username) } }, select: { username: true } }),
+        tx.reader.findMany({ where: { studentCode: { in: students.map(({ studentCode }) => studentCode) } }, select: { studentCode: true } }),
+      ]);
+      const usernames = new Set(existingUsers.map(({ username }) => username));
+      const studentCodes = new Set(existingReaders.map(({ studentCode }) => studentCode));
+      let created = 0;
+
+      for (const student of students) {
+        if (usernames.has(student.username) || studentCodes.has(student.studentCode)) continue;
+        usernames.add(student.username);
+        studentCodes.add(student.studentCode);
+        const user = await tx.user.create({
+          data: {
+            username: student.username,
+            password: await bcrypt.hash(student.password, 10),
+            fullName: student.fullName,
+            role: Role.STUDENT,
+            approvalStatus: StudentApprovalStatus.approved,
+          },
+        });
+        await tx.reader.create({
+          data: {
+            userId: user.id,
+            fullName: student.fullName,
+            studentCode: student.studentCode,
+            className: student.className,
+            phone: student.phone,
+          },
+        });
+        created += 1;
+      }
+
+      return { created, skipped: students.length - created };
+    });
+  }
+
+  async setStudentApproval(id: number, approvalStatus: StudentApprovalStatus) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new UserNotFoundException();
+    if (user.role !== Role.STUDENT) throw new BadRequestException('Chỉ có thể duyệt tài khoản sinh viên');
+    const updated = await this.prisma.user.update({ where: { id }, data: { approvalStatus } });
+    return excludePassword(updated);
+  }
+
+  async ensureApproved(id: number) {
+    const user = await this.prisma.user.findUnique({ where: { id }, select: { approvalStatus: true } });
+    if (!user || user.approvalStatus !== StudentApprovalStatus.approved) {
+      throw new BadRequestException('Tài khoản sinh viên chưa được quản trị viên duyệt');
+    }
   }
 
   async update(id: number, dto: UpdateUserDto) {

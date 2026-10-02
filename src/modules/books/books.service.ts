@@ -15,16 +15,23 @@ export class BooksService {
     private readonly redis: RedisService,
   ) {}
 
-  async findAll({ search, page, pageSize }: SearchBookDto) {
+  async findAll({ search, author, category, page, pageSize }: SearchBookDto) {
     // Chỉ cache trang 1 KHÔNG search - trường hợp phổ biến nhất (mở trang danh sách
     // lần đầu). Có search/phân trang khác thì bỏ qua cache, không đáng giữ nhiều key
     const cacheKey = 'books:page1';
-    if (!search && page === 1) {
+    const hasFilters = Boolean(search || author || category);
+    if (!hasFilters && page === 1) {
       const cached = await this.redis.get(cacheKey);
       if (cached) return cached;
     }
 
-    const where = search ? { title: { contains: search, mode: 'insensitive' as const } } : undefined;
+    const where = hasFilters
+      ? {
+          ...(search && { title: { contains: search, mode: 'insensitive' as const } }),
+          ...(author && { author: { contains: author, mode: 'insensitive' as const } }),
+          ...(category && { category: { contains: category, mode: 'insensitive' as const } }),
+        }
+      : undefined;
     const [items, total] = await Promise.all([
       this.prisma.book.findMany({ where, include: { copies: true }, ...getSkipTake(page, pageSize) }),
       this.prisma.book.count({ where }),
@@ -34,7 +41,7 @@ export class BooksService {
     // KHÔNG cache khi rỗng - nếu cache lúc DB chưa có dữ liệu (hoặc dữ liệu bị thêm
     // bằng cách khác ngoài API này, ví dụ seed/Prisma Studio), cache sẽ "kẹt" ở
     // trạng thái rỗng cho tới khi hết TTL (5 phút) dù DB đã có sách thật.
-    if (!search && page === 1 && items.length > 0) await this.redis.set(cacheKey, result, 300);
+    if (!hasFilters && page === 1 && items.length > 0) await this.redis.set(cacheKey, result, 300);
     return result;
   }
 
@@ -168,5 +175,25 @@ export class BooksService {
     const book = await this.prisma.book.delete({ where: { id } });
     await this.redis.del('books:page1');
     return book;
+  }
+
+  async removeMany(ids: number[]) {
+    const result = await this.prisma.$transaction(async (tx) => {
+      const deletableBooks = await tx.book.findMany({
+        where: {
+          id: { in: ids },
+          copies: { every: { borrowRecords: { none: {} }, reservations: { none: {} } } },
+        },
+        select: { id: true },
+      });
+      const deletableIds = deletableBooks.map(({ id }) => id);
+      if (!deletableIds.length) return { deleted: 0, copiesDeleted: 0 };
+
+      const copies = await tx.bookCopy.deleteMany({ where: { bookId: { in: deletableIds } } });
+      const books = await tx.book.deleteMany({ where: { id: { in: deletableIds } } });
+      return { deleted: books.count, copiesDeleted: copies.count };
+    });
+    if (result.deleted) await this.redis.del('books:page1');
+    return { deleted: result.deleted, copiesDeleted: result.copiesDeleted, skipped: ids.length - result.deleted };
   }
 }
